@@ -9,30 +9,45 @@ jobs:
     steps:
       - name: Downloading ngrok
         run: |
-          Invoke-WebRequest https://raw.githubusercontent.com/adtitas/ngrok-rdp/main/resources/ngrok.zip -OutFile ngrok.zip
-          Invoke-WebRequest https://raw.githubusercontent.com/adtitas/ngrok-rdp/main/resources/start.bat -OutFile start.bat
-
-      - name: Extracting ngrok Files
-        run: Expand-Archive ngrok.zip
+          Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
+          Expand-Archive ngrok.zip -DestinationPath .
 
       - name: Connecting ngrok Account
-        run: .\ngrok\ngrok.exe authtoken $Env:NGROK_AUTH_TOKEN
+        run: .\ngrok.exe authtoken $Env:NGROK_AUTH_TOKEN
         env:
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
 
       - name: Enabling RDP Access [CPU 2 Core - 7GB Ram - 256 SSD]
         run: |
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+          
+          # Giriş için "runneradmin" kullanıcısına şifre tanımla
+          net user runneradmin MyPassword1234! /add
+          net localgroup administrators runneradmin /add
 
-      - name: Creating Tunnel
-        run: Start-Process Powershell -ArgumentList '-Noexit -Command ".\ngrok\ngrok.exe tcp 3389"'
-
-      - name: Connect to RDP [Copy ip, username, password from here]
-        run: cmd /c start.bat
-
-      - name: TimeCount
+      - name: Creating Tunnel & Connect Info
         run: |
-          Invoke-WebRequest https://raw.githubusercontent.com/adtitas/ngrok-rdp/main/resources/loop.ps1 -OutFile loop.ps1
-          ./loop.ps1
+          Start-Process .\ngrok.exe -ArgumentList "tcp 3389"
+          Start-Sleep -Seconds 5
+          
+          # Ngrok API'sinden public IP ve Port bilgisini çekip ekrana bas
+          $NgrokEndpoint = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels"
+          $PublicUrl = $NgrokEndpoint.tunnels.public_url
+          
+          Write-Host "--------------------------------------------------------"
+          Write-Host "RDP BAGLANTI BILGILERI"
+          Write-Host "Adres: $PublicUrl"
+          Write-Host "Kullanici Adi: runneradmin"
+          Write-Host "Sifre: MyPassword1234!"
+          Write-Host "--------------------------------------------------------"
+
+      - name: TimeCount (Keep Alive Loop)
+        run: |
+          $val = 0
+          while ($val -lt 100) {
+              Write-Host "Workflow canli tutuluyor... Dakika: $val"
+              Start-Sleep -Seconds 60
+              $val++
+          }
